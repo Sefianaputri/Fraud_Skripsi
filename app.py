@@ -18,8 +18,8 @@ st.title("🛡️ Fraud Detection System")
 st.write("Deteksi fraud menggunakan Random Forest dan Naive Bayes")
 
 # =====================================
-# SIMULASI STORAGE FREKUENSI
-# (di real system → database / redis)
+# STORAGE FREKUENSI (SIMULASI BACKEND)
+# di production → database / redis
 # =====================================
 if "device_counter" not in st.session_state:
     st.session_state.device_counter = defaultdict(int)
@@ -39,30 +39,30 @@ def feature_engineering(raw_df):
         pd.to_datetime(df["signup_time"])
     ).dt.total_seconds()
 
-    # =========================
+    # =====================
     # DEVICE FREQUENCY
-    # =========================
-    device_id = df.loc[0, "device_id"]
+    # =====================
+    device_id = str(df.loc[0, "device_id"])
     st.session_state.device_counter[device_id] += 1
     df["device_freq"] = st.session_state.device_counter[device_id]
 
-    # =========================
+    # =====================
     # IP FREQUENCY
-    # =========================
-    ip_address = df.loc[0, "ip_address"]
+    # =====================
+    ip_address = str(df.loc[0, "ip_address"])
     st.session_state.ip_counter[ip_address] += 1
     df["ip_freq"] = st.session_state.ip_counter[ip_address]
 
-    # =========================
+    # =====================
     # ENCODING
-    # =========================
+    # =====================
     df["source_Direct"] = (df["source"] == "Direct").astype(int)
     df["source_SEO"] = (df["source"] == "SEO").astype(int)
     df["browser_IE"] = (df["browser"] == "IE").astype(int)
 
-    # =========================
-    # VALUE GROUPING
-    # =========================
+    # =====================
+    # VALUE GROUP
+    # =====================
     df["value_group_medium"] = (
         (df["purchase_value"] >= 20) &
         (df["purchase_value"] < 100)
@@ -71,7 +71,7 @@ def feature_engineering(raw_df):
     return df
 
 # =====================================
-# LOAD MODEL OTOMATIS
+# LOAD MODEL
 # =====================================
 @st.cache_resource
 def load_model(model_type, cv):
@@ -91,7 +91,7 @@ def load_model(model_type, cv):
     return joblib.load(path)
 
 # =====================================
-# SIDEBAR – PILIH MODEL
+# SIDEBAR
 # =====================================
 st.sidebar.header("⚙️ Konfigurasi Model")
 
@@ -133,12 +133,12 @@ with st.form("fraud_form"):
             "Browser", ["Chrome", "Firefox", "IE", "Safari"]
         )
         device_id = st.text_input(
-            "Device ID", value="DEV001"
+            "Device ID", value="QVPSPJUOCKZAR"
         )
 
     with col2:
         ip_address = st.text_input(
-            "IP Address", value="192.168.1.1"
+            "IP Address", value="103.25.61.88"
         )
         signup_time = st.datetime_input("Signup Time")
         purchase_time = st.datetime_input("Purchase Time")
@@ -162,38 +162,9 @@ if submit:
     # Feature engineering
     X = feature_engineering(raw_input)
 
-    # Samakan fitur training
+    # Samakan fitur dengan training
     try:
         X = X[features]
     except KeyError as e:
-        st.error(f"Fitur input tidak sesuai dengan model: {e}")
+        st.error(f"Fitur tidak sesuai dengan model: {e}")
         st.stop()
-
-    # Scaling
-    if scaler is not None:
-        X = scaler.transform(X)
-
-    # Feature selection
-    if selector is not None:
-        X = selector.transform(X)
-
-    # Prediksi
-    y_pred = model.predict(X)[0]
-
-    if hasattr(model, "predict_proba"):
-        prob = model.predict_proba(X)[0][1]
-        st.metric("Probabilitas Fraud", f"{prob:.2%}")
-
-    st.markdown("---")
-    st.subheader("📊 Hasil Prediksi")
-
-    if y_pred == 1:
-        st.error("🚨 TRANSAKSI TERINDIKASI FRAUD")
-    else:
-        st.success("✅ TRANSAKSI NORMAL (LEGIT)")
-
-# =====================================
-# FOOTER
-# =====================================
-st.markdown("---")
-st.caption("Fraud Detection System | Random Forest & Naive Bayes")
