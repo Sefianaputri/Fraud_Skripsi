@@ -37,14 +37,14 @@ st.write(
 @st.cache_resource
 def load_models():
     models = {
-        "RF Baseline CV 3": "rf_baseline_cv3.pkl",
-        "RF Baseline CV 5": "rf_baseline_cv5.pkl",
-        "RF Tuned CV 3": "rf_tuned_cv3.pkl",
-        "RF Tuned CV 5": "rf_tuned_cv5.pkl",
-        "CNB Baseline CV 3": "cnb_baseline_cv3.pkl",
-        "CNB Baseline CV 5": "cnb_baseline_cv5.pkl",
-        "CNB Tuned CV 3": "cnb_tuned_cv3.pkl",
-        "CNB Tuned CV 5": "cnb_tuned_cv5.pkl",
+        "RF Baseline CV 3": "models/rf_baseline_cv3.pkl",
+        "RF Baseline CV 5": "models/rf_baseline_cv5.pkl",
+        "RF Tuned CV 3": "models/rf_tuned_cv3.pkl",
+        "RF Tuned CV 5": "models/rf_tuned_cv5.pkl",
+        "CNB Baseline CV 3": "models/cnb_baseline_cv3.pkl",
+        "CNB Baseline CV 5": "models/cnb_baseline_cv5.pkl",
+        "CNB Tuned CV 3": "models/cnb_tuned_cv3.pkl",
+        "CNB Tuned CV 5": "models/cnb_tuned_cv5.pkl",
     }
 
     loaded_models = {}
