@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
-# =====================================
-# FRAUD DETECTION STREAMLIT APP
-# =====================================
-
 import streamlit as st
 import pandas as pd
 import joblib
 import os
 
 # =====================================
-# STREAMLIT CONFIG
+# CONFIG
 # =====================================
 st.set_page_config(
     page_title="Fraud Detection System",
@@ -18,35 +14,26 @@ st.set_page_config(
 )
 
 st.title("🛡️ Fraud Detection System")
-st.write(
-    "Aplikasi deteksi fraud berbasis Machine Learning "
-    "(Random Forest & Complement Naive Bayes)"
-)
+st.write("Deteksi fraud menggunakan Random Forest & Naive Bayes")
 
 # =====================================
-# FEATURE ENGINEERING (BACKEND)
+# FEATURE ENGINEERING
 # =====================================
 def feature_engineering(raw_df):
     df = raw_df.copy()
 
-    # Time difference (detik)
     df["time_diff"] = (
         pd.to_datetime(df["purchase_time"]) -
         pd.to_datetime(df["signup_time"])
     ).dt.total_seconds()
 
-    # Frequency (dummy / placeholder, sesuai training)
     df["device_freq"] = 1
     df["ip_freq"] = 1
 
-    # Encoding source
     df["source_Direct"] = (df["source"] == "Direct").astype(int)
     df["source_SEO"] = (df["source"] == "SEO").astype(int)
-
-    # Encoding browser
     df["browser_IE"] = (df["browser"] == "IE").astype(int)
 
-    # Value group
     df["value_group_medium"] = (
         (df["purchase_value"] >= 20) &
         (df["purchase_value"] < 100)
@@ -55,62 +42,53 @@ def feature_engineering(raw_df):
     return df
 
 # =====================================
-# LOAD MODELS
+# LOAD MODEL OTOMATIS
 # =====================================
 @st.cache_resource
-def load_models():
-    models = {
-        "RF Baseline CV 3": "models/rf_baseline_cv3.pkl",
-        "RF Baseline CV 5": "models/rf_baseline_cv5.pkl",
-        "RF Tuned CV 3": "models/rf_tuned_cv3.pkl",
-        "RF Tuned CV 5": "models/rf_tuned_cv5.pkl",
-        "CNB Baseline CV 3": "models/cnb_baseline_cv3.pkl",
-        "CNB Baseline CV 5": "models/cnb_baseline_cv5.pkl",
-        "CNB Tuned CV 3": "models/cnb_tuned_cv3.pkl",
-        "CNB Tuned CV 5": "models/cnb_tuned_cv5.pkl",
+def load_model(model_type, cv):
+    model_map = {
+        ("Random Forest", 3): "models/rf_tuned_cv3.pkl",
+        ("Random Forest", 5): "models/rf_tuned_cv5.pkl",
+        ("Naive Bayes", 3): "models/cnb_tuned_cv3.pkl",
+        ("Naive Bayes", 5): "models/cnb_tuned_cv5.pkl",
     }
 
-    loaded = {}
-    for name, path in models.items():
-        if not os.path.exists(path):
-            st.error(f"Model tidak ditemukan: {path}")
-            st.stop()
+    path = model_map[(model_type, cv)]
 
-        bundle = joblib.load(path)
+    if not os.path.exists(path):
+        st.error(f"Model tidak ditemukan: {path}")
+        st.stop()
 
-        for key in ["model", "features"]:
-            if key not in bundle:
-                st.error(f"Model {name} tidak valid (missing '{key}')")
-                st.stop()
-
-        loaded[name] = bundle
-
-    return loaded
-
-MODELS = load_models()
+    return joblib.load(path)
 
 # =====================================
-# PILIH MODEL
+# SIDEBAR
 # =====================================
 st.sidebar.header("⚙️ Konfigurasi Model")
 
-model_name = st.sidebar.selectbox(
-    "Pilih Model",
-    list(MODELS.keys())
+model_type = st.sidebar.selectbox(
+    "Pilih Algoritma",
+    ["Random Forest", "Naive Bayes"]
 )
 
-bundle = MODELS[model_name]
+cv = st.sidebar.selectbox(
+    "Cross Validation",
+    [3, 5]
+)
+
+bundle = load_model(model_type, cv)
+
 model = bundle["model"]
 features = bundle["features"]
-scaler = bundle.get("scaler", None)
-selector = bundle.get("feature_selector", None)
+scaler = bundle.get("scaler")
+selector = bundle.get("feature_selector")
 
-st.sidebar.success(bundle.get("model_type", model_name))
+st.sidebar.success(f"{model_type} | CV {cv}")
 
 # =====================================
 # INPUT DATA MENTAH
 # =====================================
-st.subheader("🧾 Input Data Transaksi (Data Mentah)")
+st.subheader("🧾 Input Data Transaksi")
 
 with st.form("fraud_form"):
     col1, col2 = st.columns(2)
@@ -130,7 +108,6 @@ with st.form("fraud_form"):
 # PREDIKSI
 # =====================================
 if submit:
-    # RAW INPUT
     raw_input = pd.DataFrame([{
         "purchase_value": purchase_value,
         "source": source,
@@ -139,25 +116,15 @@ if submit:
         "purchase_time": purchase_time
     }])
 
-    # FEATURE ENGINEERING
     X = feature_engineering(raw_input)
+    X = X[features]
 
-    # Samakan fitur dengan training
-    try:
-        X = X[features]
-    except KeyError as e:
-        st.error(f"Fitur tidak cocok dengan model: {e}")
-        st.stop()
-
-    # Scaling
     if scaler is not None:
         X = scaler.transform(X)
 
-    # Feature Selection
     if selector is not None:
         X = selector.transform(X)
 
-    # Prediksi
     y_pred = model.predict(X)[0]
 
     if hasattr(model, "predict_proba"):
@@ -165,15 +132,13 @@ if submit:
         st.metric("Probabilitas Fraud", f"{prob:.2%}")
 
     st.markdown("---")
-    st.subheader("📊 Hasil Prediksi")
-
     if y_pred == 1:
         st.error("🚨 TRANSAKSI TERINDIKASI FRAUD")
     else:
-        st.success("✅ TRANSAKSI NORMAL (LEGIT)")
+        st.success("✅ TRANSAKSI NORMAL")
 
 # =====================================
 # FOOTER
 # =====================================
 st.markdown("---")
-st.caption("Fraud Detection System | Random Forest & Complement Naive Bayes")
+st.caption("Fraud Detection System | RF & Naive Bayes")
