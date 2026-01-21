@@ -32,10 +32,14 @@ st.write("Aplikasi deteksi penipuan transaksi menggunakan Random Forest dan Comp
 @st.cache_resource
 def load_models():
     return {
-        "RF Baseline": joblib.load("models/rf_baseline.pkl"),
-        "RF Tuned": joblib.load("models/rf_tuned.pkl"),
-        "CNB Baseline": joblib.load("models/cnb_baseline.pkl"),
-        "CNB Tuned": joblib.load("models/cnb_tuned.pkl"),
+        "RF Baseline CV 3": joblib.load("rf_baseline_cv3.pkl"),
+        "RF Baseline CV 5": joblib.load("rf_baseline_cv5.pkl"),
+        "RF Tuned CV 3": joblib.load("rf_tuned_cv3.pkl"),
+        "RF Tuned CV 5": joblib.load("rf_tuned_cv5.pkl"),
+        "CNB Baseline CV 3": joblib.load("cnb_baseline_cv3.pkl"),
+        "CNB Baseline CV 5": joblib.load("cnb_baseline_cv5.pkl"),
+        "CNB Tuned CV 3": joblib.load("cnb_tuned_cv3.pkl"),
+        "CNB Tuned CV 5": joblib.load("cnb_tuned_cv5.pkl"),
     }
 
 MODELS = load_models()
