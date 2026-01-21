@@ -3,7 +3,6 @@ import streamlit as st
 import pandas as pd
 import joblib
 import os
-from collections import defaultdict
 
 # =====================================
 # CONFIG
@@ -15,17 +14,15 @@ st.set_page_config(
 )
 
 st.title("🛡️ Fraud Detection System")
-st.write("Deteksi fraud menggunakan Random Forest dan Naive Bayes")
+st.write("Deteksi fraud menggunakan Random Forest & Naive Bayes")
 
 # =====================================
-# STORAGE FREKUENSI (SIMULASI BACKEND)
-# di production → database / redis
+# UTIL FUNCTION
 # =====================================
-if "device_counter" not in st.session_state:
-    st.session_state.device_counter = defaultdict(int)
-
-if "ip_counter" not in st.session_state:
-    st.session_state.ip_counter = defaultdict(int)
+def normalize_year(dt, min_year=2000):
+    if dt.year < min_year:
+        return dt.replace(year=min_year)
+    return dt
 
 # =====================================
 # FEATURE ENGINEERING (BACKEND)
@@ -33,36 +30,35 @@ if "ip_counter" not in st.session_state:
 def feature_engineering(raw_df):
     df = raw_df.copy()
 
-    # Time difference (detik)
+    # Normalisasi tahun
+    df["signup_time"] = df["signup_time"].apply(normalize_year)
+    df["purchase_time"] = df["purchase_time"].apply(normalize_year)
+
+    # Time difference
     df["time_diff"] = (
         pd.to_datetime(df["purchase_time"]) -
         pd.to_datetime(df["signup_time"])
     ).dt.total_seconds()
 
-    # =====================
-    # DEVICE FREQUENCY
-    # =====================
-    device_id = str(df.loc[0, "device_id"])
-    st.session_state.device_counter[device_id] += 1
-    df["device_freq"] = st.session_state.device_counter[device_id]
+    df["time_diff"] = df["time_diff"].clip(lower=0)
 
-    # =====================
-    # IP FREQUENCY
-    # =====================
-    ip_address = str(df.loc[0, "ip_address"])
-    st.session_state.ip_counter[ip_address] += 1
-    df["ip_freq"] = st.session_state.ip_counter[ip_address]
+    # ===============================
+    # Frequency features
+    # ===============================
+    # Pada deploy (1 data) → freq = 1
+    df["device_freq"] = 1
+    df["ip_freq"] = 1
 
-    # =====================
-    # ENCODING
-    # =====================
+    # ===============================
+    # Encoding categorical
+    # ===============================
     df["source_Direct"] = (df["source"] == "Direct").astype(int)
     df["source_SEO"] = (df["source"] == "SEO").astype(int)
     df["browser_IE"] = (df["browser"] == "IE").astype(int)
 
-    # =====================
-    # VALUE GROUP
-    # =====================
+    # ===============================
+    # Value group
+    # ===============================
     df["value_group_medium"] = (
         (df["purchase_value"] >= 20) &
         (df["purchase_value"] < 100)
@@ -71,7 +67,7 @@ def feature_engineering(raw_df):
     return df
 
 # =====================================
-# LOAD MODEL
+# LOAD MODEL OTOMATIS
 # =====================================
 @st.cache_resource
 def load_model(model_type, cv):
@@ -82,13 +78,21 @@ def load_model(model_type, cv):
         ("Naive Bayes", 5): "models/cnb_tuned_cv5.pkl",
     }
 
-    path = model_map.get((model_type, cv))
+    path = model_map[(model_type, cv)]
 
-    if path is None or not os.path.exists(path):
-        st.error("Model tidak ditemukan. Pastikan file .pkl tersedia.")
+    if not os.path.exists(path):
+        st.error(f"Model tidak ditemukan: {path}")
         st.stop()
 
-    return joblib.load(path)
+    bundle = joblib.load(path)
+
+    required_keys = ["model", "features"]
+    for k in required_keys:
+        if k not in bundle:
+            st.error(f"Model tidak valid, key '{k}' tidak ditemukan")
+            st.stop()
+
+    return bundle
 
 # =====================================
 # SIDEBAR
@@ -115,31 +119,41 @@ selector = bundle.get("feature_selector")
 st.sidebar.success(f"{model_type} | CV {cv}")
 
 # =====================================
-# INPUT DATA MENTAH
+# INPUT DATA MENTAH (USER FRIENDLY)
 # =====================================
-st.subheader("🧾 Input Data Transaksi (Raw Data)")
+st.subheader("🧾 Input Data Transaksi")
 
 with st.form("fraud_form"):
     col1, col2 = st.columns(2)
 
     with col1:
         purchase_value = st.number_input(
-            "Purchase Value", min_value=1.0, value=35.0
+            "Purchase Value",
+            min_value=1.0,
+            value=35.0
         )
-        source = st.selectbox(
-            "Traffic Source", ["Direct", "SEO", "Ads"]
-        )
-        browser = st.selectbox(
-            "Browser", ["Chrome", "Firefox", "IE", "Safari"]
-        )
+
         device_id = st.text_input(
-            "Device ID", value="QVPSPJUOCKZAR"
+            "Device ID",
+            value="QVPSPJUOCKZAR"
+        )
+
+        ip_address = st.text_input(
+            "IP Address",
+            value="192.168.1.1"
+        )
+
+        source = st.selectbox(
+            "Traffic Source",
+            ["Direct", "SEO", "Ads"]
         )
 
     with col2:
-        ip_address = st.text_input(
-            "IP Address", value="103.25.61.88"
+        browser = st.selectbox(
+            "Browser",
+            ["Chrome", "Firefox", "IE", "Safari"]
         )
+
         signup_time = st.datetime_input("Signup Time")
         purchase_time = st.datetime_input("Purchase Time")
 
@@ -151,20 +165,49 @@ with st.form("fraud_form"):
 if submit:
     raw_input = pd.DataFrame([{
         "purchase_value": purchase_value,
-        "source": source,
-        "browser": browser,
         "device_id": device_id,
         "ip_address": ip_address,
+        "source": source,
+        "browser": browser,
         "signup_time": signup_time,
         "purchase_time": purchase_time
     }])
 
-    # Feature engineering
+    # Feature engineering backend
     X = feature_engineering(raw_input)
 
-    # Samakan fitur dengan training
+    # Samakan fitur dengan model
     try:
         X = X[features]
     except KeyError as e:
-        st.error(f"Fitur tidak sesuai dengan model: {e}")
+        st.error(f"Fitur input tidak sesuai model: {e}")
         st.stop()
+
+    # Scaling
+    if scaler is not None:
+        X = scaler.transform(X)
+
+    # Feature selection
+    if selector is not None:
+        X = selector.transform(X)
+
+    # Prediksi
+    y_pred = model.predict(X)[0]
+
+    if hasattr(model, "predict_proba"):
+        prob = model.predict_proba(X)[0][1]
+        st.metric("Probabilitas Fraud", f"{prob:.2%}")
+
+    st.markdown("---")
+    st.subheader("📊 Hasil Prediksi")
+
+    if y_pred == 1:
+        st.error("🚨 TRANSAKSI TERINDIKASI FRAUD")
+    else:
+        st.success("✅ TRANSAKSI NORMAL")
+
+# =====================================
+# FOOTER
+# =====================================
+st.markdown("---")
+st.caption("Fraud Detection System | Random Forest & Naive Bayes")
