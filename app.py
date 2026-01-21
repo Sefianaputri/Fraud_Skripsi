@@ -17,27 +17,31 @@ st.set_page_config(
 st.title("🛡️ Fraud Detection System")
 st.write("Deteksi fraud menggunakan Random Forest & Naive Bayes")
 
-MIN_DATE = dt.datetime(2000, 1, 1)
+# =====================================
+# RANGE WAKTU (INI KUNCI)
+# =====================================
+MIN_DATE = dt.datetime(1990, 1, 1)
+MAX_DATE = dt.datetime(2090, 12, 31)
 
 # =====================================
 # UTIL
 # =====================================
-def normalize_year(dtime, min_year=2000):
+def normalize_year(dtime, min_year=1990):
     if dtime.year < min_year:
         return dtime.replace(year=min_year)
     return dtime
 
 # =====================================
-# FEATURE ENGINEERING (BACKEND)
+# FEATURE ENGINEERING
 # =====================================
 def feature_engineering(raw_df):
     df = raw_df.copy()
 
-    # ---- Normalisasi waktu ----
+    # Normalisasi waktu (backend safety)
     df["signup_time"] = df["signup_time"].apply(normalize_year)
     df["purchase_time"] = df["purchase_time"].apply(normalize_year)
 
-    # ---- Time difference ----
+    # Selisih waktu
     df["time_diff"] = (
         pd.to_datetime(df["purchase_time"]) -
         pd.to_datetime(df["signup_time"])
@@ -45,17 +49,16 @@ def feature_engineering(raw_df):
 
     df["time_diff"] = df["time_diff"].clip(lower=0)
 
-    # ---- Frequency features ----
-    # Deploy single input → freq = 1
+    # Frequency features (deploy = 1)
     df["device_freq"] = 1
     df["ip_freq"] = 1
 
-    # ---- Encoding kategori ----
+    # Encoding kategori
     df["source_Direct"] = (df["source"] == "Direct").astype(int)
     df["source_SEO"] = (df["source"] == "SEO").astype(int)
     df["browser_IE"] = (df["browser"] == "IE").astype(int)
 
-    # ---- Value group ----
+    # Value group
     df["value_group_medium"] = (
         (df["purchase_value"] >= 20) &
         (df["purchase_value"] < 100)
@@ -114,7 +117,7 @@ selector = bundle.get("feature_selector")
 st.sidebar.success(f"{model_type} | CV {cv}")
 
 # =====================================
-# INPUT DATA (MENTAH)
+# INPUT DATA
 # =====================================
 st.subheader("🧾 Input Data Transaksi")
 
@@ -143,19 +146,21 @@ with st.form("fraud_form"):
         signup_time = st.datetime_input(
             "Signup Time",
             value=MIN_DATE,
-            min_value=MIN_DATE
+            min_value=MIN_DATE,
+            max_value=MAX_DATE
         )
 
         purchase_time = st.datetime_input(
             "Purchase Time",
             value=MIN_DATE,
-            min_value=MIN_DATE
+            min_value=MIN_DATE,
+            max_value=MAX_DATE
         )
 
     submit = st.form_submit_button("🔍 Prediksi")
 
 # =====================================
-# PREDICTION (ANTI ERROR)
+# PREDICTION
 # =====================================
 if submit:
     raw_input = pd.DataFrame([{
@@ -168,25 +173,21 @@ if submit:
         "purchase_time": purchase_time
     }])
 
-    # Feature engineering
     X = feature_engineering(raw_input)
 
-    # ---- Paksa semua fitur sesuai model ----
+    # Paksa fitur sesuai model
     for col in features:
         if col not in X.columns:
             X[col] = 0
 
     X = X[features]
 
-    # Scaling
     if scaler is not None:
         X = scaler.transform(X)
 
-    # Feature selection
     if selector is not None:
         X = selector.transform(X)
 
-    # Prediction
     y_pred = model.predict(X)[0]
 
     if hasattr(model, "predict_proba"):
@@ -194,8 +195,6 @@ if submit:
         st.metric("Probabilitas Fraud", f"{prob:.2%}")
 
     st.markdown("---")
-    st.subheader("📊 Hasil Prediksi")
-
     if y_pred == 1:
         st.error("🚨 TRANSAKSI TERINDIKASI FRAUD")
     else:
